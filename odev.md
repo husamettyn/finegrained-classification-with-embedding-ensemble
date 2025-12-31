@@ -1,0 +1,1 @@
+Image encoder ensembles: en az 3 image encoder ı (clip vb.) yanyana koyup en az 2 katmanlı mlp ile birleştirmek, amaç zor bir sınıflandırma problemini çözmek, tekil ve toplu perf. karşılaştırma 

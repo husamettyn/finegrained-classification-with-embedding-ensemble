@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Project
+dataset/
+models/
+!models/.gitkeep
+outputs/
+logs/
+*.pt
+*.pth
+*.ckpt
+
