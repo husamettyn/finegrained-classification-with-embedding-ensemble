@@ -3,8 +3,8 @@ import os
 import argparse
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from src.data.dataset import CUB200Dataset
-from src.models.extractors import get_extractor
+from data.dataset import CUB200Dataset
+from models.extractors import get_extractor
 
 def extract_and_save(extractor, loader, save_path, device):
     all_embeddings = []
@@ -28,7 +28,7 @@ def extract_and_save(extractor, loader, save_path, device):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_dir", default="dataset", help="Path to dataset root")
-    parser.add_argument("--model", required=True, choices=['dinov2', 'openclip', 'convnext'], help="Model to use")
+    parser.add_argument("--model", required=True, choices=['dinov2', 'dinov3', 'openclip', 'siglip', 'convnext'], help="Model to use")
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()

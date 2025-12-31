@@ -19,7 +19,6 @@ venv.bak/
 
 # Project
 dataset/
-models/
 !models/.gitkeep
 outputs/
 logs/

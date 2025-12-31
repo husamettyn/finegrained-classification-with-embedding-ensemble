@@ -1,0 +1,7 @@
+{
+    "embedding_dir": "embeddings/openclip",
+    "epochs": 50,
+    "batch_size": 128,
+    "lr": 0.001,
+    "device": "cuda"
+}
