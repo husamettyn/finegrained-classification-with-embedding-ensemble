@@ -31,6 +31,9 @@ class CUB200Dataset(Dataset):
         # Merge
         self.data = self.images.merge(self.image_class_labels, on='img_id')
         self.data = self.data.merge(self.train_test_split, on='img_id')
+        
+        # Ensure deterministic order
+        self.data = self.data.sort_values('img_id')
 
         # Filter by split
         if self.split == 'train':

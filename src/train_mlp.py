@@ -87,13 +87,21 @@ def plot_training_history(history, save_dir):
 def train(args):
     device = args.device
     
-    # Setup Output Directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    embedding_name = os.path.basename(args.embedding_dir)
-    if not embedding_name: # Handle trailing slash
-        embedding_name = os.path.basename(os.path.dirname(args.embedding_dir))
+    # Determine timestamp
+    if args.batch_timestamp:
+        timestamp = args.batch_timestamp
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Determine model name
+    if len(args.embedding_dirs) == 1:
+        embedding_name = os.path.basename(args.embedding_dirs[0])
+        if not embedding_name: # Handle trailing slash
+            embedding_name = os.path.basename(os.path.dirname(args.embedding_dirs[0]))
+    else:
+        embedding_name = "concatenated_all"
         
-    output_dir = os.path.join("models", "mlp", embedding_name, timestamp)
+    output_dir = os.path.join("models", timestamp, embedding_name)
     os.makedirs(output_dir, exist_ok=True)
     
     print(f"Output directory: {output_dir}")
@@ -103,9 +111,45 @@ def train(args):
         json.dump(vars(args), f, indent=4)
     
     # Load Embeddings
-    print(f"Loading embeddings from {args.embedding_dir}...")
-    train_emb, train_labels = load_embeddings(os.path.join(args.embedding_dir, "train.pt"))
-    test_emb, test_labels = load_embeddings(os.path.join(args.embedding_dir, "test.pt"))
+    print("Loading embeddings...")
+    train_embeddings_list = []
+    test_embeddings_list = []
+    train_labels_ref = None
+    test_labels_ref = None
+    
+    for emb_dir in args.embedding_dirs:
+        print(f"  Loading from {emb_dir}...")
+        train_e, train_l = load_embeddings(os.path.join(emb_dir, "train.pt"))
+        test_e, test_l = load_embeddings(os.path.join(emb_dir, "test.pt"))
+        
+        # Verify alignment
+        if train_labels_ref is None:
+            train_labels_ref = train_l
+            test_labels_ref = test_l
+        else:
+            if not torch.equal(train_labels_ref, train_l):
+                raise ValueError(f"Train labels mismatch in {emb_dir}")
+            if not torch.equal(test_labels_ref, test_l):
+                raise ValueError(f"Test labels mismatch in {emb_dir}")
+        
+        train_embeddings_list.append(train_e)
+        test_embeddings_list.append(test_e)
+        
+    # Concatenate
+    if len(train_embeddings_list) > 1:
+        print("Concatenating embeddings...")
+        train_emb = torch.cat(train_embeddings_list, dim=1)
+        test_emb = torch.cat(test_embeddings_list, dim=1)
+    else:
+        train_emb = train_embeddings_list[0]
+        test_emb = test_embeddings_list[0]
+        
+    train_labels = train_labels_ref
+    test_labels = test_labels_ref
+    
+    print(f"Final Train Shape: {train_emb.shape}")
+    print(f"Final Test Shape: {test_emb.shape}")
+
     
     # Create DataLoaders
     train_ds = TensorDataset(train_emb, train_labels)
@@ -222,7 +266,8 @@ def train(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--embedding_dir", required=True, help="Directory containing train.pt and test.pt")
+    parser.add_argument("--embedding_dirs", nargs='+', required=True, help="Directories containing train.pt and test.pt")
+    parser.add_argument("--batch_timestamp", help="Timestamp to use for output directory")
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
@@ -230,4 +275,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     train(args)
-
