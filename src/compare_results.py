@@ -48,11 +48,14 @@ def plot_comparison(df, save_dir):
         ax.bar_label(container, fmt='%.3f', padding=3, rotation=90)
         
     plt.title("Model Comparison Metrics", fontsize=16, pad=20)
-    plt.xticks(rotation=45)
+    # Fix text alignment for rotated labels
+    plt.xticks(rotation=45, ha='right')
     plt.ylim(0, 1.1)  # Scores are between 0 and 1, add some headroom for labels
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     
+    # Adjust layout to prevent label cutoff
     plt.tight_layout()
+    plt.subplots_adjust(bottom=0.15, right=0.85)  # Add extra space for rotated labels
     save_path = os.path.join(save_dir, "model_comparison.png")
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     print(f"Comparison plot saved to {save_path}")
@@ -64,17 +67,21 @@ def plot_f1_comparison(df, save_dir):
     # Sort by F1 Score
     df_sorted = df.sort_values('F1 Score', ascending=False)
     
-    ax = sns.barplot(data=df_sorted, x="Model", y="F1 Score", palette="magma")
+    # Fix FutureWarning: use hue parameter and set legend=False
+    ax = sns.barplot(data=df_sorted, x="Model", y="F1 Score", hue="Model", palette="magma", legend=False)
     
-    # Add values
+    # Add values on top of bars
     for container in ax.containers:
         ax.bar_label(container, fmt='%.4f', padding=3)
         
     plt.title("F1 Score Comparison (Sorted)", fontsize=16, pad=20)
-    plt.xticks(rotation=45)
+    # Fix text alignment for rotated labels
+    plt.xticks(rotation=45, ha='right')
     plt.ylim(0, 1.1)
     
+    # Adjust layout to prevent label cutoff
     plt.tight_layout()
+    plt.subplots_adjust(bottom=0.15)  # Add extra space for rotated labels
     save_path = os.path.join(save_dir, "f1_score_ranking.png")
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     print(f"F1 ranking plot saved to {save_path}")
