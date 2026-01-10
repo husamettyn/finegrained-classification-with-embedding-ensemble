@@ -4,7 +4,7 @@
 source .venv/bin/activate
 
 # Logs klasörünü oluştur
-mkdir -p logs
+mkdir -p logs/cub
 
 # Embedding klasörlerinin listesi
 EMBEDDINGS=("convnext" "dinov2" "dinov3" "openclip" "siglip")
@@ -20,9 +20,9 @@ for embedding in "${EMBEDDINGS[@]}"; do
     # Python scriptini çalıştır
     # Logları logs/ klasörüne kaydet
     python src/train_mlp.py \
-        --embedding_dirs "embeddings/$embedding" \
+        --embedding_dirs "embeddings/cub_200/$embedding" \
         --batch_timestamp "$TIMESTAMP" \
-        > "logs/mlp_${embedding}_${TIMESTAMP}.log" 2>&1
+        > "logs/cub/mlp_${embedding}_${TIMESTAMP}.log" 2>&1
     
     if [ $? -eq 0 ]; then
         echo "[$(date)] Successfully finished $embedding"
@@ -37,13 +37,13 @@ echo "[$(date)] Starting training for concatenated embeddings..."
 # Construct the list of directories
 EMBEDDING_DIRS=""
 for embedding in "${EMBEDDINGS[@]}"; do
-    EMBEDDING_DIRS="$EMBEDDING_DIRS embeddings/$embedding"
+    EMBEDDING_DIRS="$EMBEDDING_DIRS embeddings/cub_200/$embedding"
 done
 
 python src/train_mlp.py \
     --embedding_dirs $EMBEDDING_DIRS \
     --batch_timestamp "$TIMESTAMP" \
-    > "logs/mlp_concatenated_${TIMESTAMP}.log" 2>&1
+    > "logs/cub/mlp_concatenated_${TIMESTAMP}.log" 2>&1
 
 if [ $? -eq 0 ]; then
     echo "[$(date)] Successfully finished concatenated training"

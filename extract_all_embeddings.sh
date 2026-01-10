@@ -4,7 +4,7 @@
 source .venv/bin/activate
 
 # Logs klasörünü oluştur
-mkdir -p logs
+mkdir -p logs/cub
 
 # Embedding modellerinin listesi
 MODELS=("convnext" "dinov2" "dinov3" "openclip" "siglip")
@@ -16,7 +16,7 @@ for model in "${MODELS[@]}"; do
     
     # Python scriptini çalıştır
     # Logları logs/ klasörüne kaydet
-    python src/extract_embeddings.py --model "$model" --batch_size 32 > "logs/extract_${model}.log" 2>&1
+    python src/extract_embeddings.py --model "$model" --batch_size 32 > "logs/cub/extract_${model}.log" 2>&1
     
     if [ $? -eq 0 ]; then
         echo "[$(date)] Successfully finished $model"

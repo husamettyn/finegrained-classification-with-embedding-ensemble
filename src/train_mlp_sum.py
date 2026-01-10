@@ -43,7 +43,7 @@ def evaluate_metrics(model, loader, device, class_names=None):
             
             all_preds.extend(predicted.cpu().numpy())
             all_targets.extend(targets.cpu().numpy())
-            
+    
     # Calculate metrics
     acc = accuracy_score(all_targets, all_preds)
     precision = precision_score(all_targets, all_preds, average='weighted', zero_division=0)
@@ -118,13 +118,16 @@ def train(args):
     else:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Determine model name
+    # Determine model name - for summed embeddings
     if len(args.embedding_dirs) == 1:
         embedding_name = os.path.basename(args.embedding_dirs[0])
         if not embedding_name: # Handle trailing slash
             embedding_name = os.path.basename(os.path.dirname(args.embedding_dirs[0]))
+        embedding_name = f"{embedding_name}_sum"
     else:
-        embedding_name = "concatenated_all"
+        # Create name from embedding directory names
+        dir_names = [os.path.basename(d.rstrip('/')) for d in args.embedding_dirs]
+        embedding_name = "_plus_".join(dir_names)
         
     output_dir = os.path.join("models", timestamp, embedding_name)
     os.makedirs(output_dir, exist_ok=True)
@@ -135,12 +138,13 @@ def train(args):
     with open(os.path.join(output_dir, 'config.json'), 'w') as f:
         json.dump(vars(args), f, indent=4)
     
-    # Load Embeddings with memory-efficient concatenation
-    print("Loading embeddings...")
+    # Load Embeddings with element-wise summation (instead of concatenation)
+    print("Loading embeddings for summation...")
     train_emb = None
     test_emb = None
     train_labels_ref = None
     test_labels_ref = None
+    embedding_dim = None
     
     # Force CPU loading to avoid GPU memory issues, then move to device later if needed
     load_device = 'cpu'
@@ -160,25 +164,42 @@ def train(args):
             train_e, train_l = load_embeddings(train_path, map_location=load_device)
             test_e, test_l = load_embeddings(test_path, map_location=load_device)
             
-            # Verify alignment
+            # Verify alignment and dimensions
             if train_labels_ref is None:
                 train_labels_ref = train_l
                 test_labels_ref = test_l
                 # First embedding - initialize
-                train_emb = train_e
-                test_emb = test_e
+                train_emb = train_e.clone()
+                test_emb = test_e.clone()
+                embedding_dim = train_e.shape[1]
+                print(f"    Initialized with shape: {train_emb.shape}, embedding dim: {embedding_dim}")
             else:
+                # Verify label alignment
                 if not torch.equal(train_labels_ref, train_l):
                     raise ValueError(f"Train labels mismatch in {emb_dir}")
                 if not torch.equal(test_labels_ref, test_l):
                     raise ValueError(f"Test labels mismatch in {emb_dir}")
                 
-                # Concatenate incrementally and free memory immediately
-                print(f"    Concatenating... (current shape: {train_emb.shape})")
-                train_emb = torch.cat([train_emb, train_e], dim=1)
-                test_emb = torch.cat([test_emb, test_e], dim=1)
+                # Verify dimension compatibility
+                if train_e.shape[1] != embedding_dim:
+                    raise ValueError(
+                        f"Dimension mismatch! Expected embedding dim {embedding_dim}, "
+                        f"but got {train_e.shape[1]} from {emb_dir}. "
+                        f"Embeddings must have the same dimension for summation."
+                    )
+                if test_e.shape[1] != embedding_dim:
+                    raise ValueError(
+                        f"Dimension mismatch! Expected embedding dim {embedding_dim}, "
+                        f"but got {test_e.shape[1]} from {emb_dir} (test set). "
+                        f"Embeddings must have the same dimension for summation."
+                    )
                 
-                # Free memory immediately after concatenation
+                # Sum element-wise instead of concatenate
+                print(f"    Summing... (current shape: {train_emb.shape}, adding shape: {train_e.shape})")
+                train_emb = train_emb + train_e
+                test_emb = test_emb + test_e
+                
+                # Free memory immediately after summation
                 del train_e, test_e
                 gc.collect()  # Force garbage collection
                 if torch.cuda.is_available():
@@ -192,8 +213,8 @@ def train(args):
     train_labels = train_labels_ref
     test_labels = test_labels_ref
     
-    print(f"Final Train Shape: {train_emb.shape}")
-    print(f"Final Test Shape: {test_emb.shape}")
+    print(f"Final Train Shape: {train_emb.shape} (after summation)")
+    print(f"Final Test Shape: {test_emb.shape} (after summation)")
     
     # Calculate approximate memory usage
     train_memory_gb = train_emb.numel() * train_emb.element_size() / (1024**3)
@@ -378,19 +399,28 @@ def train(args):
     print(f"\nAll results saved to {output_dir}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--embedding_dirs", nargs='+', required=True, help="Directories containing train.pt and test.pt")
+    parser = argparse.ArgumentParser(
+        description="Train MLP with summed embeddings (element-wise addition instead of concatenation)"
+    )
+    parser.add_argument("--embedding_dirs", nargs='+', required=True, 
+                       help="Directories containing train.pt and test.pt. Embeddings must have the same dimension.")
     parser.add_argument("--batch_timestamp", help="Timestamp to use for output directory")
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--val_split", type=float, default=0.2, help="Fraction of train set to use for validation (default: 0.2)")
+    parser.add_argument("--val_split", type=float, default=0.2, 
+                       help="Fraction of train set to use for validation (default: 0.2)")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
     
     # Validate val_split
     if args.val_split <= 0 or args.val_split >= 1:
         print("ERROR: --val_split must be between 0 and 1", file=sys.stderr)
+        sys.exit(1)
+    
+    # Validate that we have at least 2 embeddings for summation (though 1 would work too)
+    if len(args.embedding_dirs) < 1:
+        print("ERROR: At least 1 embedding directory must be provided", file=sys.stderr)
         sys.exit(1)
     
     try:
@@ -404,3 +434,4 @@ if __name__ == "__main__":
         print("\nFull traceback:", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
+

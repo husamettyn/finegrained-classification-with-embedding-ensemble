@@ -12,6 +12,8 @@ ENV/
 env.bak/
 venv.bak/
 
+__init__.py
+
 # IDEs
 .vscode/
 .idea/
