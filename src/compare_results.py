@@ -1,6 +1,7 @@
 import os
 import json
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import seaborn as sns
 import pandas as pd
 import argparse
@@ -61,28 +62,122 @@ def plot_comparison(df, save_dir):
     print(f"Comparison plot saved to {save_path}")
     plt.close()
 
-def plot_f1_comparison(df, save_dir):
+def categorize_model(model_name):
+    """
+    Categorize model based on keywords in name.
+    Returns: 'ensemble', 'concat', 'sum', or 'single'
+    """
+    model_lower = model_name.lower()
+    if 'ensemble' in model_lower:
+        return 'ensemble'
+    elif 'concat' in model_lower:
+        return 'concat'
+    elif 'sum' in model_lower:
+        return 'sum'
+    else:
+        return 'single'
+
+def get_category_colors(df):
+    """
+    Create color palette based on model categories.
+    Returns a list of colors matching the order of models in df.
+    """
+    # Base colors for each category (using distinct, vibrant colors)
+    base_colors = {
+        'ensemble': '#E74C3C',      # Red
+        'concat': '#3498DB',       # Blue
+        'sum': '#2ECC71',          # Green
+        'single': '#9B59B6'        # Purple
+    }
+    
+    # Predefined color palettes for each category (darker to lighter)
+    category_palettes = {
+        'ensemble': ['#C0392B', '#E74C3C', '#EC7063', '#F1948A'],  # Red shades
+        'concat': ['#2874A6', '#3498DB', '#5DADE2', '#85C1E9'],    # Blue shades
+        'sum': ['#1E8449', '#2ECC71', '#58D68D', '#82E0AA'],        # Green shades
+        'single': ['#7D3C98', '#9B59B6', '#BB8FCE', '#D7BDE2']     # Purple shades
+    }
+    
+    # Group models by category
+    categories = {}
+    for idx, model_name in enumerate(df['Model']):
+        category = categorize_model(model_name)
+        if category not in categories:
+            categories[category] = []
+        categories[category].append(idx)
+    
+    # Create color list
+    colors = [''] * len(df)
+    
+    # Assign colors with shades for each category
+    for category, indices in categories.items():
+        palette = category_palettes[category]
+        n_models = len(indices)
+        
+        if n_models == 1:
+            # Single model in category, use middle shade
+            colors[indices[0]] = palette[1] if len(palette) > 1 else palette[0]
+        else:
+            # Multiple models, distribute across palette shades
+            # Use darker shades for better visibility
+            n_shades = min(n_models, len(palette))
+            
+            for i, idx in enumerate(indices):
+                # Distribute models across available shades
+                shade_idx = int((i / (n_models - 1)) * (n_shades - 1)) if n_models > 1 else 0
+                shade_idx = min(shade_idx, len(palette) - 1)
+                colors[idx] = palette[shade_idx]
+    
+    return colors
+
+def plot_f1_comparison(df, save_dir, zoom_f1=False):
     plt.figure(figsize=(12, 6))
     
     # Sort by F1 Score
-    df_sorted = df.sort_values('F1 Score', ascending=False)
+    df_sorted = df.sort_values('F1 Score', ascending=False).reset_index(drop=True)
     
-    # Fix FutureWarning: use hue parameter and set legend=False
-    ax = sns.barplot(data=df_sorted, x="Model", y="F1 Score", hue="Model", palette="magma", legend=False)
+    # Get category-based colors
+    colors = get_category_colors(df_sorted)
+    
+    # Create barplot with custom colors
+    ax = plt.subplot(111)
+    bars = ax.bar(range(len(df_sorted)), df_sorted['F1 Score'], color=colors)
     
     # Add values on top of bars
-    for container in ax.containers:
-        ax.bar_label(container, fmt='%.4f', padding=3)
-        
-    plt.title("F1 Score Comparison (Sorted)", fontsize=16, pad=20)
-    # Fix text alignment for rotated labels
-    plt.xticks(rotation=45, ha='right')
-    plt.ylim(0, 1.1)
+    for i, (bar, value) in enumerate(zip(bars, df_sorted['F1 Score'])):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{value:.4f}',
+                ha='center', va='bottom', fontsize=9)
+    
+    # Set x-axis labels
+    ax.set_xticks(range(len(df_sorted)))
+    ax.set_xticklabels(df_sorted['Model'], rotation=45, ha='right')
+    ax.set_ylabel('F1 Score', fontsize=12)
+    ax.set_title("F1 Score Comparison (Sorted)", fontsize=16, pad=20)
+    
+    # Set y-axis limits based on zoom option
+    if zoom_f1:
+        ax.set_ylim(0.65, 0.85)
+    else:
+        ax.set_ylim(0, 1.1)
     
     # Adjust layout to prevent label cutoff
-    plt.tight_layout()
-    plt.subplots_adjust(bottom=0.15)  # Add extra space for rotated labels
-    save_path = os.path.join(save_dir, "f1_score_ranking.png")
+    # Use subplots_adjust first, then try tight_layout with padding
+    plt.subplots_adjust(bottom=0.25, top=0.95, left=0.1, right=0.95)
+    try:
+        plt.tight_layout(pad=2.0, h_pad=1.0, w_pad=1.0)
+    except:
+        # If tight_layout fails, use manual adjustment
+        pass
+    
+    # Set filename based on zoom option
+    if zoom_f1:
+        filename = "f1_score_ranking_zoom.png"
+    else:
+        filename = "f1_score_ranking.png"
+    
+    save_path = os.path.join(save_dir, filename)
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     print(f"F1 ranking plot saved to {save_path}")
     plt.close()
@@ -90,6 +185,7 @@ def plot_f1_comparison(df, save_dir):
 def main():
     parser = argparse.ArgumentParser(description="Compare model results from metrics.json files")
     parser.add_argument("--models_dir", required=True, help="Path to the directory containing model subdirectories")
+    parser.add_argument("--zoom_f1", action="store_true", help="Zoom F1 score plot to 0.6-1.0 range on y-axis")
     args = parser.parse_args()
     
     if not os.path.exists(args.models_dir):
@@ -113,7 +209,7 @@ def main():
     
     # Generate plots
     plot_comparison(df, args.models_dir)
-    plot_f1_comparison(df, args.models_dir)
+    plot_f1_comparison(df, args.models_dir, zoom_f1=args.zoom_f1)
 
 if __name__ == "__main__":
     main()
